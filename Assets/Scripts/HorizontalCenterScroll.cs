@@ -12,22 +12,24 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
     private RectTransform contentRect;
     private HorizontalLayoutGroup horizontalLayoutGroup;
 
-    [SerializeField] private float selectedElementScale = 1.5f; // 拡大率
-    [SerializeField] private float tweenDuration = 0.5f;         // アニメーション時間
+    [SerializeField] private float selectedElementScale = 1.5f; // Scale for the selected element
+    [SerializeField] private float tweenDuration = 0.5f;       // Animation duration
 
     private List<RectTransform> elements = new List<RectTransform>();
     private int selectedIndex = 0;
 
     private Dictionary<RectTransform, Vector2> originalSizes = new Dictionary<RectTransform, Vector2>();
 
-    // コンテンツのスクロールTweenを管理
+    // Manages the scrolling tween for the content
     private Tweener contentMoveTween = null;
+
     void Awake()
     {
+        // Assign required components and validate
         scrollRect = GetComponent<ScrollRect>();
         if (scrollRect == null)
         {
-            Debug.LogError("ScrollRect コンポーネントが見つかりません。このスクリプトを ScrollRect がアタッチされたゲームオブジェクトに追加してください。");
+            Debug.LogError("ScrollRect component is missing. Attach this script to a GameObject with a ScrollRect.");
             enabled = false;
             return;
         }
@@ -35,7 +37,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
         viewportRect = scrollRect.viewport;
         if (viewportRect == null)
         {
-            Debug.LogError("Viewport が ScrollRect に設定されていません。ScrollRect の Viewport を正しく設定してください。");
+            Debug.LogError("Viewport is not set in ScrollRect. Please configure the Viewport.");
             enabled = false;
             return;
         }
@@ -43,7 +45,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
         contentRect = scrollRect.content;
         if (contentRect == null)
         {
-            Debug.LogError("Content が ScrollRect に設定されていません。ScrollRect の Content を正しく設定してください。");
+            Debug.LogError("Content is not set in ScrollRect. Please configure the Content.");
             enabled = false;
             return;
         }
@@ -51,7 +53,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
         horizontalLayoutGroup = contentRect.GetComponent<HorizontalLayoutGroup>();
         if (horizontalLayoutGroup == null)
         {
-            Debug.LogError("Content に HorizontalLayoutGroup コンポーネントが見つかりません。HorizontalLayoutGroup を追加してください。");
+            Debug.LogError("HorizontalLayoutGroup component is missing on Content. Add a HorizontalLayoutGroup.");
             enabled = false;
             return;
         }
@@ -59,19 +61,26 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
     void OnEnable()
     {
+        // Initialize the center alignment on enable
         StartCoroutine(InitializeCenter());
     }
 
+    void Start()
+    {
+        DOTween.SetTweensCapacity(500, 250); // Increase Sequence and Tween capacities
+    }
+
+
     private IEnumerator InitializeCenter()
     {
-        // 初回フレーム待機してUIが初期化されるのを待つ
+        // Wait for one frame to allow UI initialization
         yield return null;
 
-        // レイアウト再計算
+        // Force layout update
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
 
-        // 子要素収集
+        // Collect all child elements
         elements.Clear();
         foreach (Transform child in contentRect)
         {
@@ -81,21 +90,21 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
             }
         }
 
-        // オリジナルサイズを記録
+        // Store the original sizes of elements
         foreach (var elem in elements)
         {
             originalSizes[elem] = elem.sizeDelta;
         }
 
-        // パディングを動的に設定
+        // Dynamically set padding for layout
         SetLayoutPadding();
 
-        // 再度レイアウトを確定
+        // Force another layout update
         Canvas.ForceUpdateCanvases();
         LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
         yield return null;
 
-        // 初回表示で index=0 を中央表示
+        // Initially center on the first element (index = 0)
         if (elements.Count > 0)
         {
             CenterOnElement(elements[selectedIndex], useTween: false);
@@ -106,19 +115,16 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
     {
         if (horizontalLayoutGroup == null)
         {
-            Debug.LogError("HorizontalLayoutGroupがアサインされていません。");
+            Debug.LogError("HorizontalLayoutGroup is not assigned.");
             return;
         }
 
-        // ビューポートの幅
+        // Calculate padding to center elements in the viewport
         float viewportWidth = viewportRect.rect.width;
+        float elementWidth = elements.Count > 0 ? elements[0].rect.width : 100f; // Default element width
 
-        // 要素の幅（最初の要素を基準）
-        float elementWidth = elements.Count > 0 ? elements[0].rect.width : 100f; // デフォルト値100
-
-        // パディング計算
         float paddingSide = (viewportWidth - elementWidth) / 2f;
-        paddingSide = Mathf.Max(paddingSide, 0); // パディングが負にならないように
+        paddingSide = Mathf.Max(paddingSide, 0); // Ensure padding is not negative
 
         horizontalLayoutGroup.padding.left = Mathf.RoundToInt(paddingSide);
         horizontalLayoutGroup.padding.right = Mathf.RoundToInt(paddingSide);
@@ -128,6 +134,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
     public void OnNextButton()
     {
+        // Navigate to the next element if possible
         if (selectedIndex < elements.Count - 1)
         {
             selectedIndex++;
@@ -137,6 +144,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
     public void OnPrevButton()
     {
+        // Navigate to the previous element if possible
         if (selectedIndex > 0)
         {
             selectedIndex--;
@@ -146,35 +154,33 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
     private void CenterOnElement(RectTransform targetElement, bool useTween = true)
     {
+        // Center the target element in the viewport
         float viewportWidth = viewportRect.rect.width;
 
-        // 要素中心計算
+        // Calculate the center position of the target element
         Vector3 worldCenter = targetElement.TransformPoint(targetElement.rect.center);
         Vector3 localCenter = contentRect.InverseTransformPoint(worldCenter);
         float elementCenterX = localCenter.x;
 
         float targetContentPosX = (viewportWidth * 0.5f) - elementCenterX;
 
-        // スクロール移動アニメーション
+        // Animate the content movement
         if (useTween)
         {
-            // 既存のスクロールTweenがあれば停止
             if (contentMoveTween != null && contentMoveTween.IsActive())
             {
                 contentMoveTween.Kill();
             }
 
-            // 新しいスクロールTweenを開始
             contentMoveTween = contentRect.DOAnchorPosX(targetContentPosX, tweenDuration)
                 .SetEase(Ease.OutCubic);
         }
         else
         {
-            // アニメーションなしで即時移動
             contentRect.anchoredPosition = new Vector2(targetContentPosX, contentRect.anchoredPosition.y);
         }
 
-        // 拡大縮小アニメーションを実行
+        // Perform scaling animation
         HandleElementScaling(targetElement, useTween);
     }
 
@@ -182,16 +188,18 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
     {
         foreach (var elem in elements)
         {
-            // 既存のサイズTweenを停止
+            // Stop existing tweens
             elem.DOKill();
 
             if (elem == targetElement)
             {
-                // 選択された要素を拡大
+                // Scale up the selected element
                 if (useTween)
                 {
+                    // Use or reuse Tween to reduce overhead
                     elem.DOSizeDelta(originalSizes[elem] * selectedElementScale, tweenDuration)
-                        .SetEase(Ease.OutCubic);
+                        .SetEase(Ease.OutCubic)
+                        .SetUpdate(true);
                 }
                 else
                 {
@@ -200,11 +208,12 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
             }
             else
             {
-                // 選択されていない要素を縮小
+                // Reset size for unselected elements
                 if (useTween)
                 {
                     elem.DOSizeDelta(originalSizes[elem], tweenDuration)
-                        .SetEase(Ease.OutCubic);
+                        .SetEase(Ease.OutCubic)
+                        .SetUpdate(true);
                 }
                 else
                 {
@@ -215,24 +224,24 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
         if (useTween)
         {
-            // アニメーション完了後にレイアウトを再計算
+            // Use or reuse Tween for delayed layout recalculation
             DOVirtual.DelayedCall(tweenDuration, () =>
             {
                 LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
-            });
+            }).SetUpdate(true); // Ensure it runs during Update
         }
         else
         {
-            // レイアウト再計算
             LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
         }
     }
 
+
     public void OnEndDrag(PointerEventData eventData)
     {
+        // Stop inertia and align to the closest element after dragging
         if (elements.Count == 0) return;
 
-        // 慣性をリセットして中央に移動後に停止
         scrollRect.velocity = Vector2.zero;
 
         float currentContentX = contentRect.anchoredPosition.x;
@@ -261,6 +270,7 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
 
     public void OnDrag(PointerEventData eventData)
     {
+        // Dynamically scale the closest element during dragging
         if (elements.Count == 0) return;
 
         float currentContentX = contentRect.anchoredPosition.x;
@@ -283,16 +293,16 @@ public class HorizontalCenterScroll : MonoBehaviour, IEndDragHandler, IDragHandl
             }
         }
 
-        // 中央に近い要素の拡大縮小をアニメーション付きで実行
         HandleElementScaling(elements[closestIndex], useTween: true);
     }
 
     public void AddElement(RectTransform newElementPrefab)
     {
+        // Add a new element to the content and recalculate layout
         RectTransform newElement = Instantiate(newElementPrefab, contentRect);
         elements.Add(newElement);
         originalSizes[newElement] = newElement.sizeDelta;
-        SetLayoutPadding(); // パディング再計算
+        SetLayoutPadding();
         LayoutRebuilder.ForceRebuildLayoutImmediate(contentRect);
     }
 }
